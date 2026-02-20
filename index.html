@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>VaultX - Modern Şifre Yöneticisi</title>
+    <!-- FontAwesome & Google Fonts -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --primary: #3b82f6;
+            --primary-glow: rgba(59, 130, 246, 0.5);
+            --accent: #10b981;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --glass-bg: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
+
+        body {
+            background-color: var(--bg-color);
+            background-image: radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.15), transparent 25%),
+                              radial-gradient(circle at 85% 30%, rgba(16, 185, 129, 0.15), transparent 25%);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        /* Glassmorphism Container */
+        .app-container {
+            width: 100%;
+            max-width: 450px;
+            height: 90vh;
+            max-height: 850px;
+            background: var(--glass-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+            border-radius: 30px;
+            box-shadow: var(--glass-shadow);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Screens */
+        .screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            padding: 40px 30px;
+            display: flex;
+            flex-direction: column;
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            transform: translateY(20px) scale(0.95);
+        }
+        .screen.active {
+            opacity: 1;
+            pointer-events: all;
+            transform: translateY(0) scale(1);
+        }
+
+        /* Typography & UI Elements */
+        h1 { font-size: 28px; font-weight: 600; margin-bottom: 10px; text-align: center; }
+        p.subtitle { color: var(--text-muted); text-align: center; margin-bottom: 40px; font-size: 14px; }
+        
+        .input-group { position: relative; margin-bottom: 25px; }
+        .input-group i { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: var(--text-muted); }
+        
+        input {
+            width: 100%;
+            padding: 15px 15px 15px 45px;
+            background: rgba(0,0,0,0.2);
+            border: 1px solid var(--glass-border);
+            border-radius: 15px;
+            color: white;
+            font-size: 15px;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+        input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 15px var(--primary-glow);
+            background: rgba(0,0,0,0.4);
+        }
+
+        button.btn-primary {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, var(--primary), #2563eb);
+            border: none;
+            border-radius: 15px;
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 10px 20px rgba(59, 130, 246, 0.3);
+            transition: all 0.3s ease;
+        }
+        button.btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 25px rgba(59, 130, 246, 0.5);
+        }
+
+        /* Dashboard Specific */
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        .header h2 { font-size: 22px; }
+        .lock-btn { background: none; border: none; color: var(--text-muted); font-size: 20px; cursor: pointer; transition: color 0.3s; }
+        .lock-btn:hover { color: #ef4444; }
+
+        .vault-list {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+        /* Scrollbar */
+        .vault-list::-webkit-scrollbar { width: 5px; }
+        .vault-list::-webkit-scrollbar-track { background: transparent; }
+        .vault-list::-webkit-scrollbar-thumb { background: var(--glass-border); border-radius: 10px; }
+
+        .vault-item {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--glass-border);
+            border-radius: 15px;
+            padding: 15px 20px;
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s ease;
+            animation: slideIn 0.5s ease forwards;
+            opacity: 0;
+            transform: translateX(-20px);
+        }
+        .vault-item:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+        .item-info h3 { font-size: 16px; font-weight: 500; }
+        .item-info p { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+        
+        .item-actions button {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            width: 35px; height: 35px;
+            border-radius: 50%;
+            color: white;
+            cursor: pointer;
+            margin-left: 8px;
+            transition: all 0.3s;
+        }
+        .item-actions button:hover { background: var(--primary); transform: scale(1.1); }
+        .item-actions button.delete-btn:hover { background: #ef4444; }
+
+        /* Floating Action Button (FAB) */
+        .fab {
+            position: absolute;
+            bottom: 30px; right: 30px;
+            width: 60px; height: 60px;
+            background: linear-gradient(135deg, var(--accent), #059669);
+            border-radius: 50%;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 24px; color: white;
+            box-shadow: 0 10px 25px rgba(16, 185, 129, 0.4);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            z-index: 10;
+        }
+        .fab:hover { transform: scale(1.1) rotate(90deg); }
+
+        /* Add Modal */
+        .modal-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(5px);
+            display: flex; justify-content: center; align-items: center;
+            opacity: 0; pointer-events: none;
+            transition: all 0.3s ease;
+            z-index: 20;
+        }
+        .modal-overlay.active { opacity: 1; pointer-events: all; }
+        
+        .modal {
+            background: var(--bg-color);
+            padding: 30px;
+            border-radius: 20px;
+            width: 85%;
+            border: 1px solid var(--glass-border);
+            transform: translateY(50px);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .modal-overlay.active .modal { transform: translateY(0); }
+        .modal h3 { margin-bottom: 20px; text-align: center; }
+
+        .btn-group { display: flex; gap: 10px; margin-top: 20px; }
+        .btn-group button { flex: 1; }
+        .btn-cancel { background: transparent; border: 1px solid var(--glass-border); color: white; padding: 12px; border-radius: 12px; cursor: pointer; transition: 0.3s; }
+        .btn-cancel:hover { background: rgba(255,255,255,0.1); }
+
+        /* Toast Notification */
+        .toast {
+            position: absolute; bottom: -60px; left: 50%; transform: translateX(-50%);
+            background: white; color: black;
+            padding: 10px 20px; border-radius: 30px;
+            font-size: 14px; font-weight: 500;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            z-index: 100;
+            display: flex; align-items: center; gap: 10px;
+        }
+        .toast.show { bottom: 30px; }
+        .toast i { color: var(--accent); }
+
+        @keyframes slideIn {
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        /* Responsive */
+        @media (max-width: 480px) {
+            .app-container { height: 100vh; border-radius: 0; border: none; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        
+        <!-- SETUP SCREEN -->
+        <div class="screen" id="setup-screen">
+            <div style="text-align: center; margin-bottom: 20px;">
+                <i class="fa-solid fa-fingerprint" style="font-size: 50px; color: var(--primary); text-shadow: 0 0 20px var(--primary-glow);"></i>
+            </div>
+            <h1>VaultX'e Hoş Geldin</h1>
+            <p class="subtitle">Tüm şifrelerin için tek bir anahtar. Lütfen bir Ana Şifre (Master Password) belirle.</p>
+            
+            <div class="input-group">
+                <i class="fa-solid fa-lock"></i>
+                <input type="password" id="setup-pass" placeholder="Ana Şifre Belirle" autocomplete="new-password">
+            </div>
+            <div class="input-group">
+                <i class="fa-solid fa-lock"></i>
+                <input type="password" id="setup-pass-confirm" placeholder="Şifreyi Tekrar Gir">
+            </div>
+            <button class="btn-primary" onclick="setMasterPassword()">Kasayı Oluştur <i class="fa-solid fa-arrow-right" style="margin-left: 8px;"></i></button>
+        </div>
+
+        <!-- LOGIN SCREEN -->
+        <div class="screen" id="login-screen">
+            <div style="text-align: center; margin-bottom: 20px; margin-top: 40px;">
+                <i class="fa-solid fa-shield-halved" style="font-size: 60px; color: var(--primary); text-shadow: 0 0 30px var(--primary-glow);"></i>
+            </div>
+            <h1>Kasa Kilitli</h1>
+            <p class="subtitle">Şifrelerine erişmek için ana şifreni gir.</p>
+            
+            <div class="input-group" style="margin-top: 20px;">
+                <i class="fa-solid fa-key"></i>
+                <input type="password" id="login-pass" placeholder="Ana Şifre" autocomplete="current-password" onkeypress="handleEnter(event, unlockVault)">
+            </div>
+            <button class="btn-primary" onclick="unlockVault()">Kilidi Aç <i class="fa-solid fa-unlock" style="margin-left: 8px;"></i></button>
+        </div>
+
+        <!-- DASHBOARD SCREEN -->
+        <div class="screen" id="dashboard-screen">
+            <div class="header">
+                <h2><i class="fa-solid fa-vault" style="color: var(--primary); margin-right: 8px;"></i> VaultX</h2>
+                <button class="lock-btn" onclick="lockVault()" title="Kasayı Kilitle"><i class="fa-solid fa-lock"></i></button>
+            </div>
+            
+            <div class="vault-list" id="vault-list">
+                <!-- Şifreler buraya JS ile yüklenecek -->
+            </div>
+
+            <div class="fab" onclick="toggleModal(true)">
+                <i class="fa-solid fa-plus"></i>
+            </div>
+        </div>
+
+        <!-- ADD MODAL -->
+        <div class="modal-overlay" id="add-modal">
+            <div class="modal">
+                <h3>Yeni Şifre Ekle</h3>
+                <div class="input-group">
+                    <i class="fa-solid fa-tag"></i>
+                    <input type="text" id="new-title" placeholder="Başlık (örn: Netflix, Gmail)">
+                </div>
+                <div class="input-group">
+                    <i class="fa-solid fa-key"></i>
+                    <input type="password" id="new-pass" placeholder="Şifre">
+                </div>
+                <div class="btn-group">
+                    <button class="btn-cancel" onclick="toggleModal(false)">İptal</button>
+                    <button class="btn-primary" onclick="savePassword()" style="padding: 12px;">Kaydet</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TOAST NOTIFICATION -->
+        <div class="toast" id="toast">
+            <i class="fa-solid fa-circle-check"></i> <span id="toast-msg">Kopyalandı!</span>
+        </div>
+
+    </div>
+
+    <script>
+        // State
+        let masterHash = localStorage.getItem('vaultx_master');
+        let sessionKey = null; // Session boyunca şifreyi açık tutar
+
+        // DOM Elements
+        const screens = {
+            setup: document.getElementById('setup-screen'),
+            login: document.getElementById('login-screen'),
+            dashboard: document.getElementById('dashboard-screen')
+        };
+        const modal = document.getElementById('add-modal');
+        const toast = document.getElementById('toast');
+
+        // --- BASİT ŞİFRELEME MOTORU (XOR + Base64) ---
+        // Not: Gerçek projelerde Web Crypto API (AES-GCM) kullanılmalıdır. Bu sadece PWA demosu içindir.
+        const encrypt = (text, key) => {
+            let result = '';
+            for(let i = 0; i < text.length; i++) {
+                result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+            }
+            return btoa(result);
+        };
+        const decrypt = (base64, key) => {
+            let text = atob(base64);
+            let result = '';
+            for(let i = 0; i < text.length; i++) {
+                result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+            }
+            return result;
+        };
+        // Basit Hashing (Master pass kontrolü için)
+        const simpleHash = str => {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                hash = (hash << 5) - hash + str.charCodeAt(i);
+                hash |= 0;
+            }
+            return btoa(hash.toString());
+        };
+
+        // --- UYGULAMA MANTIĞI ---
+
+        // Uygulama Başlatma
+        function init() {
+            if (masterHash) switchScreen('login');
+            else switchScreen('setup');
+        }
+
+        // Ekran Değiştirme Animasyonu
+        function switchScreen(screenName) {
+            Object.values(screens).forEach(s => s.classList.remove('active'));
+            setTimeout(() => {
+                screens[screenName].classList.add('active');
+            }, 100);
+        }
+
+        // Enter Tuşu Dinleyicisi
+        function handleEnter(e, func) {
+            if(e.key === 'Enter') func();
+        }
+
+        // Ana Şifre Kurulumu
+        function setMasterPassword() {
+            const p1 = document.getElementById('setup-pass').value;
+            const p2 = document.getElementById('setup-pass-confirm').value;
+
+            if(!p1 || p1.length < 4) return showToast("Şifre en az 4 karakter olmalı!", true);
+            if(p1 !== p2) return showToast("Şifreler eşleşmiyor!", true);
+
+            localStorage.setItem('vaultx_master', simpleHash(p1));
+            masterHash = simpleHash(p1);
+            
+            // Kurulum sonrası otomatik giriş yap
+            sessionKey = p1; 
+            document.getElementById('setup-pass').value = '';
+            document.getElementById('setup-pass-confirm').value = '';
+            
+            switchScreen('dashboard');
+            loadVault();
+            showToast("Kasa başarıyla oluşturuldu!");
+        }
+
+        // Kasa Kilidini Açma
+        function unlockVault() {
+            const pass = document.getElementById('login-pass').value;
+            if(!pass) return;
+
+            if(simpleHash(pass) === masterHash) {
+                sessionKey = pass;
+                document.getElementById('login-pass').value = '';
+                switchScreen('dashboard');
+                loadVault();
+            } else {
+                showToast("Yanlış şifre!", true);
+            }
+        }
+
+        // Kasayı Kilitleme
+        function lockVault() {
+            sessionKey = null;
+            document.getElementById('vault-list').innerHTML = ''; // Güvenlik için DOM'dan temizle
+            switchScreen('login');
+            showToast("Kasa kilitlendi.");
+        }
+
+        // Modal Kontrolü
+        function toggleModal(show) {
+            if(show) {
+                document.getElementById('new-title').value = '';
+                document.getElementById('new-pass').value = '';
+                modal.classList.add('active');
+                document.getElementById('new-title').focus();
+            } else {
+                modal.classList.remove('active');
+            }
+        }
+
+        // Yeni Şifre Kaydetme
+        function savePassword() {
+            const title = document.getElementById('new-title').value;
+            const pass = document.getElementById('new-pass').value;
+
+            if(!title || !pass) return showToast("Lütfen tüm alanları doldurun!", true);
+
+            // Verileri getir
+            let vault = JSON.parse(localStorage.getItem('vaultx_data') || '[]');
+            
+            // Şifreleyerek kaydet
+            vault.push({
+                id: Date.now(),
+                title: title,
+                encryptedPass: encrypt(pass, sessionKey)
+            });
+
+            localStorage.setItem('vaultx_data', JSON.stringify(vault));
+            toggleModal(false);
+            loadVault();
+            showToast("Şifre kaydedildi!");
+        }
+
+        // Şifreleri Ekrana Çizme (Animasyonlu)
+        function loadVault() {
+            const list = document.getElementById('vault-list');
+            list.innerHTML = '';
+            
+            let vault = JSON.parse(localStorage.getItem('vaultx_data') || '[]');
+            
+            if(vault.length === 0) {
+                list.innerHTML = `<div style="text-align:center; color: var(--text-muted); margin-top: 50px;">
+                    <i class="fa-solid fa-ghost" style="font-size: 40px; margin-bottom: 15px; opacity:0.5;"></i>
+                    <p>Kasan şu an boş.</p>
+                </div>`;
+                return;
+            }
+
+            vault.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.className = 'vault-item';
+                div.style.animationDelay = `${index * 0.1}s`; // Stagger animasyonu
+                
+                div.innerHTML = `
+                    <div class="item-info">
+                        <h3>${item.title}</h3>
+                        <p>••••••••</p>
+                    </div>
+                    <div class="item-actions">
+                        <button onclick="copyPass('${item.encryptedPass}')" title="Kopyala"><i class="fa-regular fa-copy"></i></button>
+                        <button class="delete-btn" onclick="deletePass(${item.id})" title="Sil"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        // Kopyalama İşlemi
+        function copyPass(encryptedPass) {
+            const decrypted = decrypt(encryptedPass, sessionKey);
+            navigator.clipboard.writeText(decrypted).then(() => {
+                showToast("Şifre panoya kopyalandı!");
+            });
+        }
+
+        // Silme İşlemi
+        function deletePass(id) {
+            if(confirm("Bu şifreyi silmek istediğine emin misin?")) {
+                let vault = JSON.parse(localStorage.getItem('vaultx_data') || '[]');
+                vault = vault.filter(item => item.id !== id);
+                localStorage.setItem('vaultx_data', JSON.stringify(vault));
+                loadVault();
+                showToast("Şifre silindi.");
+            }
+        }
+
+        // Toast (Bildirim) Gösterme
+        function showToast(msg, isError = false) {
+            const msgEl = document.getElementById('toast-msg');
+            const icon = toast.querySelector('i');
+            
+            msgEl.innerText = msg;
+            if(isError) {
+                icon.className = 'fa-solid fa-circle-exclamation';
+                icon.style.color = '#ef4444';
+            } else {
+                icon.className = 'fa-solid fa-circle-check';
+                icon.style.color = 'var(--accent)';
+            }
+
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        // Başlat
+        init();
+    </script>
+</body>
+</html>
