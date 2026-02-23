@@ -1,7 +1,6 @@
 /* VaultX - Premium Password Manager Logic */
 
 const AppState = {
-    masterHash: localStorage.getItem('vaultx_master'),
     sessionKey: null,
     vaultData: []
 };
@@ -22,18 +21,17 @@ const CryptoEngine = {
             console.error("Decryption failed", e);
             return null;
         }
-    },
-
-    async hashMaster(password) {
-        return CryptoJS.SHA256(password).toString();
     }
 };
 
 // UI & Logic Controller
 window.vaultApp = {
-    init() {
-        if (AppState.masterHash) this.switchScreen('login');
-        else this.switchScreen('setup');
+    async init() {
+        const { data: { session } } = await window.supabaseClient.auth.getSession();
+        if (session) {
+            await window.supabaseClient.auth.signOut(); // Force login to get decryption key
+        }
+        this.switchScreen('login');
     },
 
     switchScreen(screenId) {
@@ -63,17 +61,32 @@ window.vaultApp = {
     },
 
     async setMasterPassword() {
+        const email = document.getElementById('setup-email').value;
         const p1 = document.getElementById('setup-pass').value;
         const p2 = document.getElementById('setup-pass-confirm').value;
 
+        if (!email) return this.showToast("E-posta adresi gerekli!", true);
         if (!p1 || p1.length < 6) return this.showToast("Şifre en az 6 karakter olmalı!", true);
         if (p1 !== p2) return this.showToast("Şifreler eşleşmiyor!", true);
 
-        const hash = await CryptoEngine.hashMaster(p1);
-        localStorage.setItem('vaultx_master', hash);
-        AppState.masterHash = hash;
-        AppState.sessionKey = p1;
+        const btn = document.getElementById('btn-setup');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
 
+        const { data, error } = await window.supabaseClient.auth.signUp({
+            email: email,
+            password: p1
+        });
+
+        btn.disabled = false;
+        btn.innerHTML = '<span>Kasayı Oluştur</span><i class="fa-solid fa-arrow-right"></i>';
+
+        if (error) {
+            return this.showToast("Kayıt hatası: " + error.message, true);
+        }
+
+        AppState.sessionKey = p1; // Master key for encryption
+        document.getElementById('setup-email').value = '';
         document.getElementById('setup-pass').value = '';
         document.getElementById('setup-pass-confirm').value = '';
 
@@ -83,51 +96,75 @@ window.vaultApp = {
     },
 
     async unlockVault() {
+        const email = document.getElementById('login-email').value;
         const pass = document.getElementById('login-pass').value;
-        if (!pass) return;
 
-        const hash = await CryptoEngine.hashMaster(pass);
-        if (hash === AppState.masterHash) {
-            AppState.sessionKey = pass;
-            document.getElementById('login-pass').value = '';
-            this.switchScreen('dashboard');
-            this.loadVault();
-        } else {
-            this.showToast("Yanlış şifre!", true);
+        if (!email || !pass) return this.showToast("E-posta ve şifre gerekli!", true);
+
+        const btn = document.getElementById('btn-login');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+
+        const { data, error } = await window.supabaseClient.auth.signInWithPassword({
+            email: email,
+            password: pass
+        });
+
+        btn.disabled = false;
+        btn.innerHTML = '<span>Kilidi Aç</span><i class="fa-solid fa-unlock"></i>';
+
+        if (error) {
+            return this.showToast("Giriş hatası: " + (error.message.includes('Invalid') ? 'Yanlış e-posta veya şifre!' : error.message), true);
         }
+
+        AppState.sessionKey = pass;
+        document.getElementById('login-email').value = '';
+        document.getElementById('login-pass').value = '';
+
+        this.switchScreen('dashboard');
+        this.loadVault();
     },
 
-    lockVault() {
+    async lockVault() {
         AppState.sessionKey = null;
         AppState.vaultData = [];
         document.getElementById('vault-list').innerHTML = '';
+        await window.supabaseClient.auth.signOut();
         this.switchScreen('login');
         this.showToast("Kasa kilitlendi.");
     },
 
     async loadVault() {
-        const rawData = localStorage.getItem('vaultx_data');
-        let parsed = [];
-        if (rawData) {
-            try { parsed = JSON.parse(rawData); } catch (e) { }
+        const { data: { user } } = await window.supabaseClient.auth.getUser();
+        if (!user) return this.lockVault();
+
+        const { data: items, error } = await window.supabaseClient
+            .from('vault_items')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error(error);
+            return this.showToast("Veriler yüklenirken hata oluştu!", true);
         }
 
         AppState.vaultData = [];
-        for (let item of parsed) {
-            // Check if item was encrypted with old XOR mechanism briefly
-            // Old mechanism didn't combine u/p into JSON payload originally, it just encrypted the password.
-            // Assuming clean slate or new records mostly for the rewrite.
-            const decStr = await CryptoEngine.decrypt(item.enc, AppState.sessionKey);
+        for (let item of items) {
+            const decStr = await CryptoEngine.decrypt(item.encrypted_data, AppState.sessionKey);
             if (decStr) {
                 try {
                     const decObj = JSON.parse(decStr);
                     AppState.vaultData.push({
                         id: item.id,
-                        title: item.t,
+                        title: item.title,
                         user: decObj.u,
                         pass: decObj.p
                     });
-                } catch (e) { }
+                } catch (e) {
+                    console.error("Parse error on item", item.id);
+                }
+            } else {
+                console.error("Decryption failed for item", item.id);
             }
         }
 
@@ -183,7 +220,6 @@ window.vaultApp = {
         document.getElementById('new-user').value = '';
         document.getElementById('new-pass').value = '';
         document.getElementById('add-modal').classList.add('active');
-        setTimeout(() => document.getElementById('new-title').focus(), 100);
     },
 
     closeAddModal() {
@@ -211,14 +247,22 @@ window.vaultApp = {
         const payload = JSON.stringify({ u: user, p: pass });
         const encrypted = await CryptoEngine.encrypt(payload, AppState.sessionKey);
 
-        let vault = JSON.parse(localStorage.getItem('vaultx_data') || '[]');
-        vault.push({
-            id: Date.now().toString(),
-            t: title,
-            enc: encrypted
-        });
+        const { data: userData } = await window.supabaseClient.auth.getUser();
+        if (!userData || !userData.user) return this.showToast("Oturum süresi dolmuş!", true);
 
-        localStorage.setItem('vaultx_data', JSON.stringify(vault));
+        const { error } = await window.supabaseClient
+            .from('vault_items')
+            .insert({
+                user_id: userData.user.id,
+                title: title,
+                encrypted_data: encrypted
+            });
+
+        if (error) {
+            console.error(error);
+            return this.showToast("Kayıt eklenirken hata: " + error.message, true);
+        }
+
         this.closeAddModal();
         this.loadVault();
         this.showToast("Kayıt başarıyla eklendi!");
@@ -271,11 +315,18 @@ window.vaultApp = {
         });
     },
 
-    deletePassword(id) {
+    async deletePassword(id) {
         if (confirm("Bu kaydı silmek istediğinize emin misiniz?")) {
-            let vault = JSON.parse(localStorage.getItem('vaultx_data') || '[]');
-            vault = vault.filter(item => item.id !== id);
-            localStorage.setItem('vaultx_data', JSON.stringify(vault));
+            const { error } = await window.supabaseClient
+                .from('vault_items')
+                .delete()
+                .eq('id', id);
+
+            if (error) {
+                console.error(error);
+                return this.showToast("Kayıt silinirken hata oluştu!", true);
+            }
+
             this.closeViewModal();
             this.loadVault();
             this.showToast("Kayıt silindi.");

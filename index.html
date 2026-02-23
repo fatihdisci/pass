@@ -45,18 +45,28 @@
 
             <form onsubmit="event.preventDefault(); window.vaultApp.setMasterPassword();" class="form-container">
                 <div class="input-wrapper">
+                    <i class="fa-solid fa-envelope"></i>
+                    <input type="email" id="setup-email" placeholder="E-posta Adresi" required>
+                </div>
+                <div class="input-wrapper">
                     <i class="fa-solid fa-lock"></i>
-                    <input type="password" id="setup-pass" placeholder="Ana Şifre Belirle" autocomplete="new-password">
+                    <input type="password" id="setup-pass" placeholder="Ana Şifre Belirle" autocomplete="new-password"
+                        required>
                 </div>
                 <div class="input-wrapper">
                     <i class="fa-solid fa-shield-check"></i>
                     <input type="password" id="setup-pass-confirm" placeholder="Şifreyi Tekrar Gir"
-                        autocomplete="new-password">
+                        autocomplete="new-password" required>
                 </div>
-                <button type="submit" class="btn-primary">
+                <button type="submit" class="btn-primary" id="btn-setup">
                     <span>Kasayı Oluştur</span>
                     <i class="fa-solid fa-arrow-right"></i>
                 </button>
+                <div style="text-align: center; margin-top: 10px;">
+                    <a href="#" onclick="window.vaultApp.switchScreen('login')"
+                        style="color: var(--primary); text-decoration: none; font-size: 14px;">Zaten hesabın var mı?
+                        Giriş Yap</a>
+                </div>
             </form>
 
             <div class="security-badge">
@@ -76,13 +86,23 @@
             <form onsubmit="event.preventDefault(); window.vaultApp.unlockVault();" class="form-container"
                 style="margin-top: 2rem;">
                 <div class="input-wrapper">
-                    <i class="fa-solid fa-key"></i>
-                    <input type="password" id="login-pass" placeholder="Ana Şifre" autocomplete="current-password">
+                    <i class="fa-solid fa-envelope"></i>
+                    <input type="email" id="login-email" placeholder="E-posta Adresi" autocomplete="username" required>
                 </div>
-                <button type="submit" class="btn-primary btn-unlock">
+                <div class="input-wrapper">
+                    <i class="fa-solid fa-key"></i>
+                    <input type="password" id="login-pass" placeholder="Ana Şifre" autocomplete="current-password"
+                        required>
+                </div>
+                <button type="submit" class="btn-primary btn-unlock" id="btn-login">
                     <span>Kilidi Aç</span>
                     <i class="fa-solid fa-unlock"></i>
                 </button>
+                <div style="text-align: center; margin-top: 10px;">
+                    <a href="#" onclick="window.vaultApp.switchScreen('setup')"
+                        style="color: var(--primary); text-decoration: none; font-size: 14px;">Hesabın yok mu? Kayıt
+                        Ol</a>
+                </div>
             </form>
         </div>
 
@@ -210,6 +230,10 @@
             <span id="toast-msg">İşlem başarılı!</span>
         </div>
     </div>
+
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase.js"></script>
 
     <!-- PWA Installation -->
     <script src="./crypto-js.min.js"></script>
