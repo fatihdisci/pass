@@ -53,3 +53,5 @@ VaultX operates on a **Zero-Knowledge** principle. Your security is our highest 
 
 ---
 Built with ❤️ by [Fatih Dişçi](https://github.com/fatihdisci)
+
+https://fatihdisci.github.io/pass/
