@@ -35,7 +35,9 @@ window.vaultApp = {
     },
 
     switchScreen(screenId) {
-        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.querySelectorAll('.screen').forEach(s => {
+            s.classList.remove('active');
+        });
         setTimeout(() => {
             const screen = document.getElementById(`${screenId}-screen`);
             if (screen) screen.classList.add('active');
