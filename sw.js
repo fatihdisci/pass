@@ -1,9 +1,10 @@
-const CACHE_NAME = 'vaultx-v3';
+const CACHE_NAME = 'vaultx-v4';
 const ASSETS = [
     './',
     './index.html',
     './style.css',
     './app.js',
+    './crypto-js.min.js',
     './manifest.json',
     './icon.png'
 ];
