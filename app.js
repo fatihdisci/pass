@@ -6,67 +6,26 @@ const AppState = {
     vaultData: []
 };
 
-// Cryptography Engine (Web Crypto API - AES-256-GCM)
+// Cryptography Engine (CryptoJS for universal support including file:// protocol)
 const CryptoEngine = {
-    async deriveKey(password, salt) {
-        const enc = new TextEncoder();
-        const keyMaterial = await window.crypto.subtle.importKey(
-            "raw", enc.encode(password), { name: "PBKDF2" }, false, ["deriveBits", "deriveKey"]
-        );
-        return window.crypto.subtle.deriveKey(
-            { name: "PBKDF2", salt: salt, iterations: 100000, hash: "SHA-256" },
-            keyMaterial, { name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]
-        );
-    },
-    
     async encrypt(text, password) {
-        const salt = window.crypto.getRandomValues(new Uint8Array(16));
-        const iv = window.crypto.getRandomValues(new Uint8Array(12));
-        const key = await this.deriveKey(password, salt);
-        const enc = new TextEncoder();
-        
-        const encryptedContent = await window.crypto.subtle.encrypt(
-            { name: "AES-GCM", iv: iv }, key, enc.encode(text)
-        );
-        
-        const encryptedArr = new Uint8Array(encryptedContent);
-        const resultArr = new Uint8Array(salt.length + iv.length + encryptedArr.length);
-        resultArr.set(salt, 0);
-        resultArr.set(iv, salt.length);
-        resultArr.set(encryptedArr, salt.length + iv.length);
-        
-        let binary = '';
-        for (let i = 0; i < resultArr.length; i++) binary += String.fromCharCode(resultArr[i]);
-        return btoa(binary);
+        return CryptoJS.AES.encrypt(text, password).toString();
     },
 
-    async decrypt(base64String, password) {
+    async decrypt(encryptedStr, password) {
         try {
-            const binaryStr = atob(base64String);
-            const bytes = new Uint8Array(binaryStr.length);
-            for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
-            
-            const salt = bytes.slice(0, 16);
-            const iv = bytes.slice(16, 28);
-            const data = bytes.slice(28);
-            
-            const key = await this.deriveKey(password, salt);
-            const decryptedContent = await window.crypto.subtle.decrypt(
-                { name: "AES-GCM", iv: iv }, key, data
-            );
-            
-            const dec = new TextDecoder();
-            return dec.decode(decryptedContent);
+            const bytes = CryptoJS.AES.decrypt(encryptedStr, password);
+            const decrypted = bytes.toString(CryptoJS.enc.Utf8);
+            if (!decrypted) throw new Error("Mismatched password or corrupted data");
+            return decrypted;
         } catch (e) {
             console.error("Decryption failed", e);
             return null;
         }
     },
-    
+
     async hashMaster(password) {
-        const enc = new TextEncoder();
-        const hashBuffer = await window.crypto.subtle.digest("SHA-256", enc.encode(password));
-        return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+        return CryptoJS.SHA256(password).toString();
     }
 };
 
@@ -81,7 +40,7 @@ window.vaultApp = {
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
         setTimeout(() => {
             const screen = document.getElementById(`${screenId}-screen`);
-            if(screen) screen.classList.add('active');
+            if (screen) screen.classList.add('active');
         }, 50);
     },
 
@@ -89,16 +48,16 @@ window.vaultApp = {
         const toast = document.getElementById('toast');
         const icon = toast.querySelector('.toast-icon i');
         const msgEl = document.getElementById('toast-msg');
-        
+
         msgEl.innerText = msg;
-        if(isError) {
+        if (isError) {
             toast.classList.add('error');
             icon.className = 'fa-solid fa-xmark';
         } else {
             toast.classList.remove('error');
             icon.className = 'fa-solid fa-check';
         }
-        
+
         toast.classList.add('show');
         setTimeout(() => toast.classList.remove('show'), 3000);
     },
@@ -106,18 +65,18 @@ window.vaultApp = {
     async setMasterPassword() {
         const p1 = document.getElementById('setup-pass').value;
         const p2 = document.getElementById('setup-pass-confirm').value;
-        
-        if(!p1 || p1.length < 6) return this.showToast("Şifre en az 6 karakter olmalı!", true);
-        if(p1 !== p2) return this.showToast("Şifreler eşleşmiyor!", true);
-        
+
+        if (!p1 || p1.length < 6) return this.showToast("Şifre en az 6 karakter olmalı!", true);
+        if (p1 !== p2) return this.showToast("Şifreler eşleşmiyor!", true);
+
         const hash = await CryptoEngine.hashMaster(p1);
         localStorage.setItem('vaultx_master', hash);
         AppState.masterHash = hash;
         AppState.sessionKey = p1;
-        
+
         document.getElementById('setup-pass').value = '';
         document.getElementById('setup-pass-confirm').value = '';
-        
+
         this.switchScreen('dashboard');
         this.loadVault();
         this.showToast("Kasa başarıyla oluşturuldu!");
@@ -125,10 +84,10 @@ window.vaultApp = {
 
     async unlockVault() {
         const pass = document.getElementById('login-pass').value;
-        if(!pass) return;
-        
+        if (!pass) return;
+
         const hash = await CryptoEngine.hashMaster(pass);
-        if(hash === AppState.masterHash) {
+        if (hash === AppState.masterHash) {
             AppState.sessionKey = pass;
             document.getElementById('login-pass').value = '';
             this.switchScreen('dashboard');
@@ -149,17 +108,17 @@ window.vaultApp = {
     async loadVault() {
         const rawData = localStorage.getItem('vaultx_data');
         let parsed = [];
-        if(rawData) {
-            try { parsed = JSON.parse(rawData); } catch(e){}
+        if (rawData) {
+            try { parsed = JSON.parse(rawData); } catch (e) { }
         }
-        
+
         AppState.vaultData = [];
-        for(let item of parsed) {
+        for (let item of parsed) {
             // Check if item was encrypted with old XOR mechanism briefly
             // Old mechanism didn't combine u/p into JSON payload originally, it just encrypted the password.
             // Assuming clean slate or new records mostly for the rewrite.
             const decStr = await CryptoEngine.decrypt(item.enc, AppState.sessionKey);
-            if(decStr) {
+            if (decStr) {
                 try {
                     const decObj = JSON.parse(decStr);
                     AppState.vaultData.push({
@@ -168,10 +127,10 @@ window.vaultApp = {
                         user: decObj.u,
                         pass: decObj.p
                     });
-                } catch(e) {}
+                } catch (e) { }
             }
         }
-        
+
         this.renderVault(AppState.vaultData);
         document.getElementById('total-passwords').innerText = AppState.vaultData.length;
     },
@@ -179,8 +138,8 @@ window.vaultApp = {
     renderVault(dataList) {
         const listEl = document.getElementById('vault-list');
         listEl.innerHTML = '';
-        
-        if(dataList.length === 0) {
+
+        if (dataList.length === 0) {
             listEl.innerHTML = `
                 <div class="empty-state">
                     <i class="fa-solid fa-ghost"></i>
@@ -195,9 +154,9 @@ window.vaultApp = {
             div.className = 'vault-item';
             div.style.animationDelay = `${index * 0.05}s`;
             div.onclick = () => this.openViewModal(item.id);
-            
+
             const initial = item.title.charAt(0).toUpperCase();
-            
+
             div.innerHTML = `
                 <div class="item-icon">${initial}</div>
                 <div class="item-info">
@@ -212,8 +171,8 @@ window.vaultApp = {
 
     filterVault() {
         const query = document.getElementById('search-input').value.toLowerCase();
-        const filtered = AppState.vaultData.filter(item => 
-            item.title.toLowerCase().includes(query) || 
+        const filtered = AppState.vaultData.filter(item =>
+            item.title.toLowerCase().includes(query) ||
             item.user.toLowerCase().includes(query)
         );
         this.renderVault(filtered);
@@ -230,7 +189,7 @@ window.vaultApp = {
     closeAddModal() {
         document.getElementById('add-modal').classList.remove('active');
     },
-    
+
     generateRandomPassword() {
         const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+";
         let pass = "";
@@ -246,41 +205,41 @@ window.vaultApp = {
         const title = document.getElementById('new-title').value;
         const user = document.getElementById('new-user').value;
         const pass = document.getElementById('new-pass').value;
-        
-        if(!title || !user || !pass) return;
+
+        if (!title || !user || !pass) return;
 
         const payload = JSON.stringify({ u: user, p: pass });
         const encrypted = await CryptoEngine.encrypt(payload, AppState.sessionKey);
-        
+
         let vault = JSON.parse(localStorage.getItem('vaultx_data') || '[]');
         vault.push({
             id: Date.now().toString(),
             t: title,
             enc: encrypted
         });
-        
+
         localStorage.setItem('vaultx_data', JSON.stringify(vault));
         this.closeAddModal();
         this.loadVault();
         this.showToast("Kayıt başarıyla eklendi!");
     },
-    
+
     currentViewId: null,
 
     openViewModal(id) {
         const item = AppState.vaultData.find(x => x.id === id);
-        if(!item) return;
-        
+        if (!item) return;
+
         this.currentViewId = id;
         document.getElementById('view-title').innerText = item.title;
         document.getElementById('view-user').innerText = item.user;
         document.getElementById('view-pass').value = item.pass;
         document.getElementById('view-pass').type = 'password';
         document.getElementById('toggle-view-pass').innerHTML = '<i class="fa-regular fa-eye"></i>';
-        
+
         const deleteBtn = document.getElementById('btn-delete-record');
         deleteBtn.onclick = () => this.deletePassword(id);
-        
+
         document.getElementById('view-modal').classList.add('active');
     },
 
@@ -295,7 +254,7 @@ window.vaultApp = {
     togglePasswordVisibility(inputId) {
         const input = document.getElementById(inputId);
         const btn = document.getElementById(`toggle-${inputId}`);
-        if(input.type === 'password') {
+        if (input.type === 'password') {
             input.type = 'text';
             btn.innerHTML = '<i class="fa-regular fa-eye-slash"></i>';
         } else {
@@ -311,9 +270,9 @@ window.vaultApp = {
             this.showToast("Panoya kopyalandı!");
         });
     },
-    
+
     deletePassword(id) {
-        if(confirm("Bu kaydı silmek istediğinize emin misiniz?")) {
+        if (confirm("Bu kaydı silmek istediğinize emin misiniz?")) {
             let vault = JSON.parse(localStorage.getItem('vaultx_data') || '[]');
             vault = vault.filter(item => item.id !== id);
             localStorage.setItem('vaultx_data', JSON.stringify(vault));
