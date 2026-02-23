@@ -27,6 +27,17 @@ const CryptoEngine = {
 // UI & Logic Controller
 window.vaultApp = {
     async init() {
+        // Listen for auth state changes (e.g. returning from email confirmation)
+        window.supabaseClient.auth.onAuthStateChange((event, session) => {
+            if (event === 'SIGNED_IN' && session) {
+                // We don't have the encryption key upon email link click,
+                // so we force them to login manually to capture the passphrase.
+                window.supabaseClient.auth.signOut();
+                this.switchScreen('login');
+                this.showToast("E-posta onaylandı! Lütfen giriş yapın.");
+            }
+        });
+
         const { data: { session } } = await window.supabaseClient.auth.getSession();
         if (session) {
             await window.supabaseClient.auth.signOut(); // Force login to get decryption key
@@ -77,7 +88,10 @@ window.vaultApp = {
 
         const { data, error } = await window.supabaseClient.auth.signUp({
             email: email,
-            password: p1
+            password: p1,
+            options: {
+                emailRedirectTo: window.location.origin + window.location.pathname
+            }
         });
 
         btn.disabled = false;
@@ -87,14 +101,17 @@ window.vaultApp = {
             return this.showToast("Kayıt hatası: " + error.message, true);
         }
 
-        AppState.sessionKey = p1; // Master key for encryption
         document.getElementById('setup-email').value = '';
         document.getElementById('setup-pass').value = '';
         document.getElementById('setup-pass-confirm').value = '';
 
-        this.switchScreen('dashboard');
-        this.loadVault();
-        this.showToast("Kasa başarıyla oluşturuldu!");
+        // Supabase requires email confirmation by default.
+        if (data.user && data.user.identities && data.user.identities.length === 0) {
+            return this.showToast("Bu e-posta zaten kullanımda!", true);
+        }
+
+        this.switchScreen('login');
+        this.showToast("Kayıt başarılı! Lütfen e-postanızı onaylayın veya giriş yapın.");
     },
 
     async unlockVault() {
